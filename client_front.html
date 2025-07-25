@@ -1,0 +1,491 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Skribble Multiplayer</title>
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/socket.io/4.7.5/socket.io.js"></script>
+    <style>
+        body {
+            font-family: 'Comic Sans MS', 'Arial', sans-serif;
+            margin: 0;
+            padding: 20px;
+            background: linear-gradient(135deg, #f0f2f5, #d9e2ec);
+            display: flex;
+            flex-direction: column;
+            align-items: center;
+            min-height: 100vh;
+        }
+        h1 {
+            color: #2d3748;
+            text-shadow: 1px 1px 3px rgba(0, 0, 0, 0.1);
+        }
+        #lobby, #game-container {
+            background: rgba(255, 255, 255, 0.97);
+            border-radius: 20px;
+            padding: 20px;
+            box-shadow: 0 4px 20px rgba(0, 0, 0, 0.1);
+            width: 100%;
+            max-width: 1200px;
+        }
+        #lobby {
+            display: flex;
+            flex-direction: column;
+            align-items: center;
+            gap: 15px;
+        }
+        #game-container {
+            display: flex;
+            gap: 25px;
+        }
+        #canvas-container {
+            flex: 3;
+            position: relative;
+        }
+        #canvas {
+            border: 3px solid #4a5568;
+            background-color: #fff;
+            border-radius: 15px;
+            cursor: crosshair;
+            box-shadow: 0 2px 12px rgba(0, 0, 0, 0.05);
+        }
+        #tools {
+            margin-top: 15px;
+            display: flex;
+            gap: 12px;
+            justify-content: center;
+            flex-wrap: wrap;
+        }
+        #sidebar {
+            flex: 1;
+            display: flex;
+            flex-direction: column;
+            gap: 20px;
+        }
+        #room-info, #chat-box, #scores {
+            background: #f7fafc;
+            padding: 15px;
+            border-radius: 15px;
+            box-shadow: 0 2px 10px rgba(0, 0, 0, 0.05);
+        }
+        #chat-box {
+            height: 250px;
+            overflow-y: auto;
+            border: 1px solid #e2e8f0;
+            padding: 10px;
+            background: #fff;
+        }
+        #chat-input {
+            width: 70%;
+            padding: 8px;
+            border: 1px solid #cbd5e0;
+            border-radius: 8px;
+        }
+        #timer {
+            font-size: 1.5em;
+            font-weight: bold;
+            text-align: center;
+            color: #e53e3e;
+            margin-top: 10px;
+        }
+        #timer-bar {
+            width: 100%;
+            height: 10px;
+            background: #e2e8f0;
+            border-radius: 5px;
+            overflow: hidden;
+        }
+        #timer-progress {
+            height: 100%;
+            background: #e53e3e;
+            width: 100%;
+            transition: width 1s linear;
+        }
+        #guess-counter {
+            font-size: 1.2em;
+            color: #4a5568;
+            text-align: center;
+        }
+        button {
+            padding: 8px 15px;
+            background: #4a5568;
+            color: #fff;
+            border: none;
+            border-radius: 8px;
+            cursor: pointer;
+            transition: background 0.3s ease;
+        }
+        button:hover {
+            background: #2d3748;
+        }
+        .color-btn {
+            width: 35px;
+            height: 35px;
+            border: 2px solid #fff;
+            border-radius: 50%;
+            cursor: pointer;
+            box-shadow: 0 0 6px rgba(0, 0, 0, 0.1);
+            transition: transform 0.2s;
+        }
+        .color-btn:hover {
+            transform: scale(1.1);
+        }
+        .hidden {
+            display: none;
+        }
+        #error-message {
+            color: #e53e3e;
+            margin-top: 5px;
+        }
+        input[type="text"] {
+            padding: 8px;
+            border: 1px solid #cbd5e0;
+            border-radius: 8px;
+            width: 200px;
+        }
+        #playerList, #score-list li {
+            color: #2d3748;
+            font-weight: bold;
+        }
+        #currentWord, #currentDrawer {
+            color: #4a5568;
+        }
+        #word-choice, #continue-choice {
+            position: fixed;
+            top: 50%;
+            left: 50%;
+            transform: translate(-50%, -50%);
+            background: #fff;
+            padding: 20px;
+            border-radius: 15px;
+            box-shadow: 0 4px 20px rgba(0, 0, 0, 0.2);
+            text-align: center;
+        }
+    </style>
+</head>
+<body>
+    <h1>Skribble Multiplayer</h1>
+    <div id="lobby" class="hidden">
+        <input id="username" placeholder="Enter Your Username" maxlength="20">
+        <input id="roomCode" placeholder="Enter Room Code" maxlength="10">
+        <button onclick="createRoom()">Create Room</button>
+        <button onclick="joinRoom()">Join Room</button>
+        <p id="error-message"></p>
+    </div>
+    <div id="game-container" class="hidden">
+        <div id="canvas-container">
+            <canvas id="canvas" width="800" height="600"></canvas>
+            <div id="tools" class="hidden">
+                <button id="clearBtn" onclick="clearCanvas()">Clear</button>
+                <input type="range" id="brushSize" min="1" max="20" value="5">
+                <button class="color-btn" style="background-color: #000000;" onclick="setColor('#000000')"></button>
+                <button class="color-btn" style="background-color: #2f4f4f;" onclick="setColor('#2f4f4f')"></button>
+                <button class="color-btn" style="background-color: #90ee90;" onclick="setColor('#90ee90')"></button>
+                <button class="color-btn" style="background-color: #ff7f50;" onclick="setColor('#ff7f50')"></button>
+                <button class="color-btn" style="background-color: #4b0082;" onclick="setColor('#4b0082')"></button>
+                <button class="color-btn" style="background-color: #008080;" onclick="setColor('#008080')"></button>
+                <button class="color-btn" style="background-color: #ff4500;" onclick="setColor('#ff4500')"></button>
+                <button class="color-btn" style="background-color: #8a2be2;" onclick="setColor('#8a2be2')"></button>
+                <button class="color-btn" style="background-color: #dc143c;" onclick="setColor('#dc143c')"></button>
+                <button class="color-btn" style="background-color: #4682b4;" onclick="setColor('#4682b4')"></button>
+            </div>
+            <div id="timer">Time Left: --</div>
+            <div id="timer-bar"><div id="timer-progress"></div></div>
+            <div id="guess-counter">Guesses Left: 3</div>
+        </div>
+        <div id="sidebar">
+            <div id="room-info">
+                <p>Room: <span id="currentRoom"></span></p>
+                <p>Players: <span id="playerList"></span></p>
+                <p>Drawer: <span id="currentDrawer">None</span></p>
+                <p>Word: <span id="currentWord">Waiting...</span></p>
+                <p>Round: <span id="currentRound">0</span></p>
+                <button onclick="leaveRoom()">Leave Room</button>
+                <button onclick="startGame()" id="startBtn">Start Game</button>
+            </div>
+            <div id="chat-box"></div>
+            <input id="chat-input" placeholder="Type your guess or message">
+            <button onclick="sendChat()">Send</button>
+            <div id="scores">
+                <h3>Leaderboard</h3>
+                <ul id="score-list"></ul>
+            </div>
+        </div>
+    </div>
+    <div id="word-choice" class="hidden">
+        <p>Choose a word:</p>
+        <div id="word-options"></div>
+    </div>
+    <div id="continue-choice" class="hidden">
+        <p>Game Over! Would you like to play another game?</p>
+        <button onclick="chooseContinue(true)">Continue</button>
+        <button onclick="chooseContinue(false)">Leave</button>
+    </div>
+
+    <script>
+        const socket = io('http://localhost:8765');
+        const canvas = document.getElementById('canvas');
+        const ctx = canvas.getContext('2d');
+        let drawing = false;
+        let currentColor = '#000000';
+        let brushSize = 5;
+        let roomCode = null;
+        let isDrawingTurn = false;
+        let guessesLeft = 3;
+
+        // UI Elements
+        const lobby = document.getElementById('lobby');
+        const gameContainer = document.getElementById('game-container');
+        const tools = document.getElementById('tools');
+        const chatBox = document.getElementById('chat-box');
+        const scoreList = document.getElementById('score-list');
+        const timer = document.getElementById('timer');
+        const timerProgress = document.getElementById('timer-progress');
+        const guessCounter = document.getElementById('guess-counter');
+        const startBtn = document.getElementById('startBtn');
+        const playerList = document.getElementById('playerList');
+        const currentDrawer = document.getElementById('currentDrawer');
+        const currentWord = document.getElementById('currentWord');
+        const currentRound = document.getElementById('currentRound');
+        const errorMessage = document.getElementById('error-message');
+        const usernameInput = document.getElementById('username');
+        const wordChoice = document.getElementById('word-choice');
+        const wordOptions = document.getElementById('word-options');
+        const continueChoice = document.getElementById('continue-choice');
+
+        socket.on('connect', () => {
+            lobby.classList.remove('hidden');
+        });
+
+        socket.on('error', (data) => {
+            errorMessage.textContent = data.message;
+            setTimeout(() => errorMessage.textContent = '', 5000);
+        });
+
+        socket.on('room_created', (data) => {
+            roomCode = data.room_code;
+            enterGameRoom();
+        });
+
+        socket.on('player_joined', (data) => {
+            if (data.sid === socket.id) {
+                roomCode = data.room_code;
+                enterGameRoom();
+            }
+            addChatMessage('System', `${data.name} joined`);
+        });
+
+        socket.on('player_left', (data) => {
+            addChatMessage('System', `${data.name} left`);
+        });
+
+        socket.on('player_list', (data) => {
+            playerList.textContent = Object.values(data.players).map(p => p.name).join(', ');
+        });
+
+        socket.on('draw_update', (data) => {
+            if (data.color === 'clear') {
+                ctx.clearRect(0, 0, canvas.width, canvas.height);
+            } else {
+                ctx.fillStyle = data.color;
+                ctx.beginPath();
+                ctx.arc(data.x, data.y, data.brushSize || 5, 0, Math.PI * 2);
+                ctx.fill();
+            }
+        });
+
+        socket.on('chat_message', (data) => {
+            addChatMessage(data.name, data.message);
+        });
+
+        socket.on('game_started', (data) => {
+            startBtn.disabled = true;
+            isDrawingTurn = data.drawer === socket.id;
+            tools.classList.toggle('hidden', !isDrawingTurn);
+            currentDrawer.textContent = data.drawer_name;
+            currentWord.textContent = data.word;
+            currentRound.textContent = data.round;
+            guessesLeft = 3;
+            guessCounter.textContent = `Guesses Left: ${guessesLeft}`;
+            guessCounter.classList.toggle('hidden', isDrawingTurn);
+            timer.textContent = `Time Left: ${data.round_time}`;
+            timerProgress.style.width = '100%';
+            wordChoice.classList.add('hidden');
+            continueChoice.classList.add('hidden');
+        });
+
+        socket.on('word_choice', (data) => {
+            wordOptions.innerHTML = '';
+            data.words.forEach(word => {
+                const btn = document.createElement('button');
+                btn.textContent = word;
+                btn.onclick = () => selectWord(word);
+                wordOptions.appendChild(btn);
+            });
+            wordChoice.classList.remove('hidden');
+        });
+
+        socket.on('time_left', (data) => {
+            timer.textContent = `Time Left: ${data.time_left}`;
+            timerProgress.style.width = `${(data.time_left / 45) * 100}%`;
+        });
+
+        socket.on('update_scores', (data) => {
+            scoreList.innerHTML = '';
+            Object.entries(data.scores)
+                .sort((a, b) => b[1] - a[1])
+                .forEach(([name, score]) => {
+                    const li = document.createElement('li');
+                    li.textContent = `${name}: ${score}`;
+                    scoreList.appendChild(li);
+                });
+        });
+
+        socket.on('post_game_choice', (data) => {
+            resetGameUI();
+            addChatMessage('System', data.message);
+            continueChoice.classList.remove('hidden');
+        });
+
+        socket.on('game_reset', (data) => {
+            resetGameUI();
+            addChatMessage('System', data.message);
+            startBtn.disabled = false;
+        });
+
+        socket.on('end_game', (data) => {
+            resetGameUI();
+            addChatMessage('System', data.reason);
+            continueChoice.classList.add('hidden');
+            lobby.classList.remove('hidden');
+            gameContainer.classList.add('hidden');
+            roomCode = null;
+        });
+
+        // Drawing
+        canvas.addEventListener('mousedown', (e) => {
+            if (!isDrawingTurn) return;
+            drawing = true;
+            draw(e);
+        });
+        canvas.addEventListener('mousemove', (e) => {
+            if (drawing && isDrawingTurn) draw(e);
+        });
+        canvas.addEventListener('mouseup', () => drawing = false);
+        canvas.addEventListener('mouseout', () => drawing = false);
+
+        document.getElementById('brushSize').addEventListener('input', (e) => {
+            brushSize = parseInt(e.target.value);
+        });
+
+        function draw(e) {
+            const rect = canvas.getBoundingClientRect();
+            const x = e.clientX - rect.left;
+            const y = e.clientY - rect.top;
+            ctx.fillStyle = currentColor;
+            ctx.beginPath();
+            ctx.arc(x, y, brushSize, 0, Math.PI * 2);
+            ctx.fill();
+            socket.emit('draw', { room_code: roomCode, x, y, color: currentColor, brushSize });
+        }
+
+        // Game Functions
+        function createRoom() {
+            const code = document.getElementById('roomCode').value.trim();
+            const username = usernameInput.value.trim();
+            if (!code || !username) return errorMessage.textContent = 'Enter room code and username!';
+            socket.emit('create_room', { room_code: code, username });
+        }
+
+        function joinRoom() {
+            const code = document.getElementById('roomCode').value.trim();
+            const username = usernameInput.value.trim();
+            if (!code || !username) return errorMessage.textContent = 'Enter room code and username!';
+            socket.emit('join_room', { room_code: code, username });
+        }
+
+        function leaveRoom() {
+            socket.emit('leave_room', { room_code: roomCode });
+            lobby.classList.remove('hidden');
+            gameContainer.classList.add('hidden');
+            resetGameUI();
+            roomCode = null;
+        }
+
+        function startGame() {
+            socket.emit('start_game', { room_code: roomCode });
+        }
+
+        function sendChat() {
+            const message = document.getElementById('chat-input').value.trim();
+            if (!message) return;
+            if (isDrawingTurn) {
+                addChatMessage('System', 'Drawer can’t guess!');
+                document.getElementById('chat-input').value = '';
+                return;
+            }
+            if (guessesLeft <= 0) {
+                addChatMessage('System', 'No guesses left!');
+                return;
+            }
+            guessesLeft--;
+            guessCounter.textContent = `Guesses Left: ${guessesLeft}`;
+            socket.emit('chat', { room_code: roomCode, message });
+            document.getElementById('chat-input').value = '';
+        }
+
+        function selectWord(word) {
+            socket.emit('select_word', { room_code: roomCode, word });
+            wordChoice.classList.add('hidden');
+        }
+
+        function chooseContinue(continueGame) {
+            socket.emit('continue_choice', { room_code: roomCode, continue: continueGame });
+            continueChoice.classList.add('hidden');
+        }
+
+        function setColor(color) {
+            currentColor = color;
+        }
+
+        function clearCanvas() {
+            if (!isDrawingTurn) return;
+            ctx.clearRect(0, 0, canvas.width, canvas.height);
+            socket.emit('draw', { room_code: roomCode, x: -1, y: -1, color: 'clear' });
+        }
+
+        function enterGameRoom() {
+            lobby.classList.add('hidden');
+            gameContainer.classList.remove('hidden');
+            document.getElementById('currentRoom').textContent = roomCode;
+        }
+
+        function addChatMessage(sender, message) {
+            const p = document.createElement('p');
+            p.textContent = `${sender}: ${message}`;
+            chatBox.appendChild(p);
+            chatBox.scrollTop = chatBox.scrollHeight;
+        }
+
+        function resetGameUI() {
+            ctx.clearRect(0, 0, canvas.width, canvas.height);
+            timer.textContent = 'Time Left: --';
+            timerProgress.style.width = '0%';
+            currentDrawer.textContent = 'None';
+            currentWord.textContent = 'Waiting...';
+            currentRound.textContent = '0';
+            startBtn.disabled = false;
+            tools.classList.add('hidden');
+            guessCounter.classList.remove('hidden');
+            guessesLeft = 3;
+            guessCounter.textContent = `Guesses Left: ${guessesLeft}`;
+            wordChoice.classList.add('hidden');
+            continueChoice.classList.add('hidden');
+        }
+
+        document.getElementById('chat-input').addEventListener('keypress', (e) => {
+            if (e.key === 'Enter') sendChat();
+        });
+    </script>
+</body>
+</html>
